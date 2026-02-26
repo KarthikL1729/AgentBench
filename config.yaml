@@ -1,9 +1,13 @@
 # config.yaml
 global:
-  model: "Qwen/Qwen3-14B" 
+  model: "Qwen/Qwen3-32B" 
   host: localhost
   port: 8000       
   temperature: 0.0                        
+  samples: 5                                # Number of query samples to test the agent on
+  shuffle: true                             # Shuffle the test samples  
+  save_trace: true     
+  trace_path: "./trace.txt"                 # Path to save the traces                
   webshop_url: "http://localhost:3000"
 
 agents:
@@ -12,8 +16,6 @@ agents:
     workload: "hotpotqa"                    # choices: ["webshop", "hotpotqa", "math", "humaneval"]
     iteration_limit: 30                     # Max number of ReAct step (Thought, Action, Observation)
     fewshot: 5                              # Number of fewshop examples
-    samples: 5                              # Number of query samples to test the agent on
-    shuffle: true                           # Shuffle the test samples
 
   my_reflexion_agent:
     type: "reflexion"
@@ -22,5 +24,10 @@ agents:
     context_limit: 2000                     # Number of "words" to limit for chat history                  
     iteration_limit: 10                     # Max number of ReAct step between reflections (Thought, Action, Observation)
     reflection_limit: 3                     # Max number of reflection steps
-    samples: 5                              # Number of query samples to test the agent on
-    shuffle: true                           # Shuffle the test samples
+
+  my_llmcompiler_agent:
+    type: "llmcompiler"
+    workload: "webshop"                     # choices: ["webshop", "hotpotqa"]
+    fewshot: 3                              # Number of fewshop examples
+    max_replan: 20                          # Max number of replanning steps
+    max_chat_history: 10                    # Max number of chat history to keep

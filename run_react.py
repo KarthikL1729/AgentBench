@@ -4,13 +4,12 @@ from langchain_openai import ChatOpenAI
 from langgraph.errors import GraphRecursionError
 from colorama import Fore, Style
 from src.agents.ReAct.react import create_react_agent
+from src.utils import parse_answer
+
 from dotenv import load_dotenv
 from langsmith import traceable, trace
 
 load_dotenv()
-
-def parse_answer(text: str):
-    return text.split("Answer: ")[-1]
 
 def main(args):
     if args.host:
@@ -20,11 +19,12 @@ def main(args):
 
     score_sum = 0
     pass_count = 0
+    samples = min(len(dataset), args.samples) if args.samples else len(dataset)
     latencies = []
 
     def pretty_output(i):
         print(Fore.YELLOW+"=" * 30)
-        print(f"Sample {i + 1}/{iteration}")
+        print(f"Sample {i + 1}/{samples}")
         if args.workload == "webshop":
             print(f"Average score so far: {round(score_sum / (i + 1), 2)}")
         print(f"Accuracy so far: {round(pass_count / (i + 1), 2)}")
@@ -41,11 +41,10 @@ def main(args):
     model = ChatOpenAI(model=args.model, base_url=host_url, stream_usage=True, stop="\nObservation:", temperature=args.temperature)
     
     # Load dataset
-    from src.dataset_loader import load_dataset, get_evaluation_function
+    from src.utils import load_dataset, get_evaluation_function
     print(f"Loading dataset for workload: {args.workload}")
     dataset = load_dataset(args.workload)
     evaluator = get_evaluation_function(args.workload)
-    iteration = min(len(dataset), args.samples) if args.samples else len(dataset)
 
     system_prompt = None
     count = 0
@@ -62,9 +61,9 @@ def main(args):
         tools = [search, lookup, finish]
         langgraph_agent_executor = create_react_agent(model, tools=tools)
         
-        for i in range(iteration):
+        for i in range(samples):
             query = dataset[i]["question"]
-            print(Fore.CYAN+Style.BRIGHT+f"[Sample {i+1}/{iteration}] {query}"+Style.RESET_ALL)
+            print(Fore.CYAN+Style.BRIGHT+f"[Sample {i+1}/{samples}] {query}"+Style.RESET_ALL)
 
             if system_prompt:
                 messages = [("system", system_prompt), ("human", query)]
@@ -102,10 +101,10 @@ def main(args):
         system_prompt = get_system_prompt(fewshots=min(args.fewshot, 5))
         langgraph_agent_executor = create_react_agent(model, tools=tools)
         
-        for i in range(iteration):
+        for i in range(samples):
             session_id = dataset[i]
             query = reset._run(session_id=session_id)
-            print(Fore.CYAN+Style.BRIGHT+f"[Sample {i+1}/{iteration}] {query}"+Style.RESET_ALL)
+            print(Fore.CYAN+Style.BRIGHT+f"[Sample {i+1}/{samples}] {query}"+Style.RESET_ALL)
             if system_prompt:
                 messages = [("system", system_prompt), ("human", query)]
             else:
@@ -114,7 +113,7 @@ def main(args):
             count += 1
             start_time = time.time()
             try:
-                with trace("ReAct_trace", tags=[args.workload, args.model, "Iteration_limit:"+str(args.iteration_limit)]):
+                with trace("ReAct_trace", tags=[args.workload, args.model, "Iteration_limit:"+str(args.iteration_limit), "Index:"+str(i)]):
                     output_dict = run_agent(args=args, agent=langgraph_agent_executor, messages=messages, label=None, evaluator=evaluator, query=query)
                 if output_dict["ispass"]:
                     pass_count += 1
@@ -140,14 +139,14 @@ def main(args):
         if args.fewshot > 2:
             print(f"Max fewshot examples for {args.workload} is 2. Running with 2 fewshot examples.")
         system_prompt = get_system_prompt(min(args.fewshot, 2))
-        for i in range(iteration):
+        for i in range(samples):
             query = dataset[i]["problem"]
-            print(Fore.CYAN+Style.BRIGHT+f"[Sample {i+1}/{iteration}] {query}"+Style.RESET_ALL)
+            print(Fore.CYAN+Style.BRIGHT+f"[Sample {i+1}/{samples}] {query}"+Style.RESET_ALL)
             messages = [("system", system_prompt), ("human", query)]
             count += 1
             start_time = time.time()
             try:
-                with trace("ReAct_trace", tags=[args.workload, args.model, "Iteration_limit:"+str(args.iteration_limit)]):
+                with trace("ReAct_trace", tags=[args.workload, args.model, "Iteration_limit:"+str(args.iteration_limit), "Index:"+str(i)]):
                     output_dict = run_agent(args=args, agent=langgraph_agent_executor, messages=messages, label=dataset[i]['solution'], evaluator=evaluator, query=query)
                 if output_dict["ispass"]:
                     pass_count += 1
@@ -175,18 +174,18 @@ def main(args):
             print(f"Max fewshot examples for {args.workload} is 1. Running with 1 fewshot example.")
         system_prompt = HUMANEVAL_PROMPT
 
-        for i in range(iteration):
+        for i in range(samples):
             query = dataset[i]["prompt"]
             tests = dataset[i]["test"]
             entry_point = dataset[i]["entry_point"]
-            print(Fore.CYAN+Style.BRIGHT+f"[Sample {i+1}/{iteration}] {query}"+Style.RESET_ALL)
+            print(Fore.CYAN+Style.BRIGHT+f"[Sample {i+1}/{samples}] {query}"+Style.RESET_ALL)
             messages = [("system", system_prompt), ("human", query)]
             count += 1
             start_time = time.time()
             try:
                 finish.tests = tests
                 finish.entry_point = entry_point
-                with trace("ReAct_trace", tags=[args.workload, args.model, "Iteration_limit:"+str(args.iteration_limit)]):
+                with trace("ReAct_trace", tags=[args.workload, args.model, "Iteration_limit:"+str(args.iteration_limit), "Index:"+str(i)]):
                     exe.tests_i = gen.invoke(query)
                     output_dict = run_agent(args=args, agent=langgraph_agent_executor, messages=messages, label=None, evaluator=evaluator, query=query)
                 if output_dict["ispass"]:
